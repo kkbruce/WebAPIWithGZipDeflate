@@ -10,7 +10,7 @@ namespace WebAPIWithGZipDeflate.Handlers
 {
     public class DecompressorHandler : DelegatingHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.Content.Headers.ContentEncoding.Any())
             {
@@ -19,21 +19,27 @@ namespace WebAPIWithGZipDeflate.Handlers
                 {
                     if (encode.Equals("deflate", StringComparison.InvariantCultureIgnoreCase))
                     {
-                        request.Content = DecompressDeflateContent(request);
+                        request.Content = await DecompressDeflateContentAsync(request).ConfigureAwait(false);
+                        return await base.SendAsync(request, cancellationToken);
                     }
-                    request.Content = DecompressGzipContent(request);
+                    request.Content = await DecompressGzipContentAsync(request).ConfigureAwait(false);
                 }
             }
-            return base.SendAsync(request, cancellationToken);
+            return await base.SendAsync(request, cancellationToken);
         }
 
-        private HttpContent DecompressDeflateContent(HttpRequestMessage request)
+        /// <summary>
+        /// Decompresses the content of the Deflate.
+        /// </summary>
+        /// <param name="request">The request.</param>
+        /// <returns></returns>
+        private async Task<HttpContent> DecompressDeflateContentAsync(HttpRequestMessage request)
         {
             MemoryStream outputStream = new MemoryStream();
-            var inputStream = request.Content.ReadAsStreamAsync().Result;
+            var inputStream = await request.Content.ReadAsStreamAsync().ConfigureAwait(false);
             using (var decompressor = new DeflateStream(inputStream, CompressionMode.Decompress))
             {
-                decompressor.CopyToAsync(outputStream);
+                await decompressor.CopyToAsync(outputStream).ConfigureAwait(false);
             }
             outputStream.Seek(0, SeekOrigin.Begin);
 
@@ -41,16 +47,20 @@ namespace WebAPIWithGZipDeflate.Handlers
             return newContent;
         }
 
-        private HttpContent DecompressGzipContent(HttpRequestMessage request)
+        /// <summary>
+        /// Decompresses the content of the gzip.
+        /// </summary>
+        /// <param name="request">The request.</param>
+        /// <returns></returns>
+        private async Task<HttpContent> DecompressGzipContentAsync(HttpRequestMessage request)
         {
             MemoryStream outputStream = new MemoryStream();
-            var inputStream = request.Content.ReadAsStreamAsync().Result;
+            var inputStream = await request.Content.ReadAsStreamAsync().ConfigureAwait(false);
             using (var decompressor = new GZipStream(inputStream, CompressionMode.Decompress))
             {
-                decompressor.CopyToAsync(outputStream);
+                await decompressor.CopyToAsync(outputStream).ConfigureAwait(false);
             }
             outputStream.Seek(0, SeekOrigin.Begin);
-
             HttpContent newContent = AddHeadersToNewContent(request, outputStream);
             return newContent;
         }
